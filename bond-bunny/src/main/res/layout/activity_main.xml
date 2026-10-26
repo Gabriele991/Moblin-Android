@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:fitsSystemWindows="true"
+  android:fillViewport="true"
+  android:scrollbars="vertical"
+  android:fadeScrollbars="true"
+  android:scrollbarStyle="insideOverlay">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp"
+    android:paddingBottom="24dp">
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="8dp">
+
+      <Button
+        android:id="@+id/button_about"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="About" />
+
+      <Button
+        android:id="@+id/button_settings"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Settings" />
+
+      <Button
+        android:id="@+id/button_url_builder"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="SRT URL" />
+
+    </LinearLayout>
+
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="8dp">
+
+      <Button
+        android:id="@+id/button_native_srtla"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:text="Start Service"
+        android:background="#4CAF50"
+        android:textColor="#FFFFFF" />
+
+    </LinearLayout>
+
+    <TextView
+      android:id="@+id/text_status"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Status: Stopped"
+      android:textSize="16sp"
+      android:textColor="#495057"
+      android:layout_marginBottom="12dp" />
+
+    <TextView
+      android:id="@+id/text_error"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:text=""
+      android:textSize="14sp"
+      android:textColor="#D32F2F"
+      android:layout_marginBottom="12dp"
+      android:visibility="gone"
+      android:background="#FFEBEE"
+      android:padding="8dp" />
+
+    <Switch
+      android:id="@+id/switch_auto_start"
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Auto start service on app launch"
+      android:textSize="16sp"
+      android:layout_marginBottom="8dp" />
+
+    <!-- Connections Section (combined stats + visualization) -->
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Connection Stats:"
+      android:textSize="16sp"
+      android:textStyle="bold"
+      android:layout_marginBottom="8dp" />
+
+    <com.dimadesu.bondbunny.SrtlaStatsView
+      android:id="@+id/srtla_stats_view"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:layout_marginBottom="16dp" />
+
+
+  </LinearLayout>
+
+</ScrollView>

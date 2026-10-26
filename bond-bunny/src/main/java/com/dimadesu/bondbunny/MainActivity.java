@@ -1,0 +1,546 @@
+package com.dimadesu.bondbunny;
+
+import android.app.Activity;
+import android.content.ClipData;
+import android.content.ClipboardManager;
+import android.content.Context;
+import android.content.Intent;
+import android.content.SharedPreferences;
+import android.net.ConnectivityManager;
+import android.net.Network;
+import android.net.NetworkCapabilities;
+import android.os.Bundle;
+import android.text.TextWatcher;
+import android.text.Editable;
+import android.widget.Button;
+import android.widget.EditText;
+import android.widget.Switch;
+import android.widget.TextView;
+import android.widget.Toast;
+import java.util.List;
+import java.util.ArrayList;
+import android.content.res.Configuration;
+import android.Manifest;
+import android.content.pm.PackageManager;
+import android.os.Build;
+import android.util.Log;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
+import androidx.core.app.NotificationCompat;
+import androidx.core.app.NotificationManagerCompat;
+import android.app.PendingIntent;
+import android.content.BroadcastReceiver;
+import android.content.IntentFilter;
+import android.content.Context;
+
+public class MainActivity extends Activity {
+    private static final int REQUEST_CODE_POST_NOTIFICATIONS = 1001;
+    private static final String PREFS_NAME = "SrtlaAppPrefs";
+    private static boolean hasPostedStartupNotification = false;
+    private static boolean isRequestingNotificationPermission = false;
+    private static final String PREF_SRTLA_HOST = "srtla_host";
+    private static final String PREF_SRTLA_PORT = "srtla_port";
+    private static final String PREF_LISTEN_PORT = "listen_port";
+    private static final String PREF_STREAM_ID = "stream_id";
+    private static final String PREF_AUTO_START = "auto_start_service";
+    
+    private TextView textStatus;
+    private TextView textError;
+    private SrtlaStatsView srtlaStatsView;
+    private Button buttonAbout;
+    private Button buttonSettings;
+    private Button buttonUrlBuilder;
+    private Button buttonNativeSrtla;
+    private Switch switchAutoStart;
+    private boolean serviceRunning = false;
+    private android.os.Handler uiHandler = new android.os.Handler(android.os.Looper.getMainLooper());
+    
+    // Debounce mechanism for start/stop button
+    private long lastToggleTime = 0;
+    private static final long TOGGLE_DEBOUNCE_MS = 3000; // 3 seconds debounce (matches startup timeout)
+    
+    // Error receiver for service errors
+    private BroadcastReceiver errorReceiver;
+
+    // Listener for UI updates from Moblink/SRTLA
+    private final SrtlaEngine.Listener engineListener = new SrtlaEngine.Listener() {
+        @Override public void onSrtlaStatus(String message) {}
+        @Override public void onSrtlaError(String message) {}
+        @Override
+        public void onRelaysChanged(List<SrtlaEngine.RelayInfo> relays) {
+            runOnUiThread(() -> srtlaStatsView.setRelays(relays));
+        }
+    };
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_main);
+        
+        initViews();
+        initializeReceivers();
+        // Request notification permission at app start (Android 13+) so Start button doesn't trigger it
+        checkAndRequestNotificationPermissionOnLaunch();
+        
+        // Restore service state if activity was recreated
+        checkServiceState();
+        
+        // Auto start service if enabled and not already running (only on fresh launch, not rotation/config change)
+        if (!serviceRunning && savedInstanceState == null) {
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            if (prefs.getBoolean(PREF_AUTO_START, false)) {
+                startNativeSrtla();
+            }
+        }
+    }
+    
+    /**
+     * Check if the SRTLA service is actually running and update UI accordingly
+     */
+    private void checkServiceState() {
+        // Check if the service is running
+        serviceRunning = NativeSrtlaService.isServiceRunning();
+        updateUI();
+        
+        if (serviceRunning || NativeSrtlaService.isServiceRunning()) {
+            Log.i("MainActivity", "checkServiceState: Service running, starting stats updates");
+            srtlaStatsView.startStatsUpdates();
+        } else {
+            Log.i("MainActivity", "checkServiceState: No services running");
+        }
+    }
+    
+    private void initViews() {
+        textStatus = findViewById(R.id.text_status);
+        textError = findViewById(R.id.text_error);
+        srtlaStatsView = findViewById(R.id.srtla_stats_view);
+        srtlaStatsView.setOnServiceStoppedListener(() -> {
+            // Periodically refresh native SRTLA UI state (handles crashes)
+            updateNativeSrtlaUI();
+        });
+        buttonAbout = findViewById(R.id.button_about);
+        buttonSettings = findViewById(R.id.button_settings);
+        buttonUrlBuilder = findViewById(R.id.button_url_builder);
+        buttonNativeSrtla = findViewById(R.id.button_native_srtla);
+        switchAutoStart = findViewById(R.id.switch_auto_start);
+        SharedPreferences autoStartPrefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        switchAutoStart.setChecked(autoStartPrefs.getBoolean(PREF_AUTO_START, false));
+        switchAutoStart.setOnCheckedChangeListener((buttonView, isChecked) ->
+            getSharedPreferences(PREFS_NAME, MODE_PRIVATE).edit()
+                .putBoolean(PREF_AUTO_START, isChecked).apply());
+        
+        buttonAbout.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, AboutActivity.class)));
+        buttonSettings.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, SettingsActivity.class)));
+        buttonUrlBuilder.setOnClickListener(v -> startActivity(new Intent(MainActivity.this, UrlBuilderActivity.class)));
+        buttonNativeSrtla.setOnClickListener(v -> toggleNativeSrtla());
+
+        // Initialize native SRTLA UI state
+        updateNativeSrtlaUI();
+        
+        // Load saved preferences or use default values
+        loadPreferences();
+    }
+    
+    @Override
+    protected void onSaveInstanceState(Bundle outState) {
+        super.onSaveInstanceState(outState);
+        // Save current form values and service state
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        outState.putString("srtla_host", prefs.getString(PREF_SRTLA_HOST, "au.srt.belabox.net"));
+        outState.putString("srtla_port", prefs.getString(PREF_SRTLA_PORT, "5000"));
+        outState.putString("stream_id", getSharedPreferences(PREFS_NAME, MODE_PRIVATE).getString(PREF_STREAM_ID, ""));
+        outState.putBoolean("service_running", serviceRunning);
+    }
+    
+    @Override
+    protected void onRestoreInstanceState(Bundle savedInstanceState) {
+        super.onRestoreInstanceState(savedInstanceState);
+    }
+    
+    private void updateUI() {
+        if (serviceRunning) {
+            textStatus.setText("✅ Service is running");
+        } else {
+            textStatus.setText("❌ Service is stopped");
+            // Only clear connection stats if native SRTLA is also not running
+            if (!NativeSrtlaService.isServiceRunning()) {
+                Log.i("MainActivity", "updateUI: Clearing connection stats - no services running");
+                srtlaStatsView.stopStatsUpdates();
+            } else {
+                Log.i("MainActivity", "updateUI: Not clearing connection stats - native SRTLA still running");
+            }
+        }
+    }
+    
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        
+        // Register error receiver
+        ContextCompat.registerReceiver(this, errorReceiver,
+            new IntentFilter("srtla-error"), ContextCompat.RECEIVER_NOT_EXPORTED);
+        
+        // Register engine listener for UI updates
+        NativeSrtlaService.getSharedEngine(this).addListener(engineListener);
+
+        // Start / restart Moblink if enabled (reads latest settings)
+        refreshMoblink();
+        
+        // Always check service state when resuming (handles rotation, app switching, etc.)
+        checkServiceState();
+        // Also check native SRTLA state
+        updateNativeSrtlaUI();
+    }
+    
+    @Override
+    protected void onPause() {
+        super.onPause();
+        // Don't stop stats updates if services are still running
+        if (!serviceRunning && !NativeSrtlaService.isServiceRunning()) {
+            Log.i("MainActivity", "onPause: No services running, stopping stats updates");
+            srtlaStatsView.stopStatsUpdates();
+        } else {
+            Log.i("MainActivity", "onPause: Services still running, keeping stats updates active");
+        }
+        // Save current form values when app is paused
+        savePreferences();
+        
+        // Leave the Moblink server running in the background so relays stay
+        // connected (and keep bonding while a stream is active). Android freezes
+        // the process when appropriate and resumes it on return to foreground.
+        // Moblink is only stopped when disabled or reconfigured (see refreshMoblink).
+        srtlaStatsView.setRelays(null);
+        NativeSrtlaService.getSharedEngine(this).removeListener(engineListener);
+        
+        // Unregister error receiver
+        try {
+            if (errorReceiver != null) {
+                unregisterReceiver(errorReceiver);
+                Log.i("MainActivity", "Unregistered error receiver");
+            }
+        } catch (IllegalArgumentException e) {
+            Log.w("MainActivity", "Error receiver was not registered");
+        }
+    }
+    
+    private void loadPreferences() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        // Algorithm preferences are now managed in SettingsActivity
+    }
+    
+    private void savePreferences() {
+        // Algorithm preferences are now managed in SettingsActivity
+        // No longer saving preferences in MainActivity
+    }
+    
+    private void initializeReceivers() {
+        // Initialize error receiver (registration happens in onResume)
+        errorReceiver = new BroadcastReceiver() {
+            @Override
+            public void onReceive(Context context, Intent intent) {
+                String errorMessage = intent.getStringExtra("error_message");
+                if (errorMessage != null) {
+                    showError(errorMessage);
+                }
+            }
+        };
+        Log.i("MainActivity", "Initialized error receiver");
+    }
+
+    // -------------------------------------------------------------------------
+    // Moblink lifecycle (runs in Activity, not the foreground service)
+    // -------------------------------------------------------------------------
+
+    /**
+     * Read Moblink settings and start/stop the WebSocket server accordingly.
+     * Called from onResume so the latest settings are always applied.
+     */
+    private void refreshMoblink() {
+        SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+        boolean enabled = prefs.getBoolean("moblink_enabled", false);
+        String password = prefs.getString("moblink_password", "1234");
+        int port = 7788;
+        try {
+            port = Integer.parseInt(prefs.getString("moblink_port", "7788").trim());
+        } catch (NumberFormatException ignored) {}
+
+        if (enabled && password != null && !password.isEmpty()) {
+            SrtlaEngine engine = NativeSrtlaService.getSharedEngine(this);
+            engine.startMoblink(password, port);
+            // Push current relay snapshot (may already have relays from before onPause)
+            srtlaStatsView.setRelays(engine.getRelays());
+        } else {
+            NativeSrtlaService.getSharedEngine(this).stopMoblink();
+            srtlaStatsView.setRelays(null);
+            
+            if (enabled && (password == null || password.isEmpty())) {
+                Toast.makeText(this, "Moblink disabled: password cannot be empty", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+    
+    private void showError(String errorMessage) {
+        runOnUiThread(() -> {
+            textError.setText(errorMessage);
+            textError.setVisibility(TextView.VISIBLE);
+            Log.e("MainActivity", "Showing error: " + errorMessage);
+        });
+    }
+    
+    private void clearError() {
+        runOnUiThread(() -> {
+            textError.setText("");
+            textError.setVisibility(TextView.GONE);
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == REQUEST_CODE_POST_NOTIFICATIONS) {
+            isRequestingNotificationPermission = false;
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                Toast.makeText(this, "Notification permission granted", Toast.LENGTH_SHORT).show();
+                Log.i("MainActivity", "POST_NOTIFICATIONS granted onRequestPermissionsResult");
+                postStartupNotification();
+            } else {
+                Log.i("MainActivity", "POST_NOTIFICATIONS denied onRequestPermissionsResult");
+                Toast.makeText(this, "Notification permission denied", Toast.LENGTH_LONG).show();
+            }
+        }
+    }
+    
+    // Check notification permission at app launch and request if necessary.
+    private void checkAndRequestNotificationPermissionOnLaunch() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
+                if (isRequestingNotificationPermission) {
+                    Log.i("MainActivity", "Notification permission request already in progress, skipping");
+                    return;
+                }
+                isRequestingNotificationPermission = true;
+                ActivityCompat.requestPermissions(
+                    this,
+                    new String[]{Manifest.permission.POST_NOTIFICATIONS},
+                    REQUEST_CODE_POST_NOTIFICATIONS
+                );
+                return;
+            }
+        }
+
+        // Permission is granted or not required — post a lightweight startup notification that the
+        // service will later update (same channel and notification id as the service).
+        postStartupNotification();
+    }
+
+    // Post a small notification at app launch so the service can update it later using the same id.
+    private void postStartupNotification() {
+        // Only post once per app launch
+        if (hasPostedStartupNotification) {
+            return;
+        }
+        hasPostedStartupNotification = true;
+        
+        try {
+            // Check for notification permission on Android 13+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS) 
+                        != PackageManager.PERMISSION_GRANTED) {
+                    Log.d("MainActivity", "POST_NOTIFICATIONS permission not granted, skipping startup notification");
+                    return;
+                }
+            }
+            
+            final String channelId = NativeSrtlaService.CHANNEL_ID;
+            final int notificationId = 1;
+
+            // Ensure the shared notification channel exists. This is idempotent.
+            NativeSrtlaService.createNotificationChannel(this);
+
+            Intent notificationIntent = new Intent(this, MainActivity.class);
+            PendingIntent pendingIntent = PendingIntent.getActivity(this, 0, notificationIntent,
+                    PendingIntent.FLAG_IMMUTABLE | PendingIntent.FLAG_UPDATE_CURRENT);
+
+            NotificationCompat.Builder builder = new NotificationCompat.Builder(this, channelId)
+                .setContentTitle("Bond Bunny started")
+                .setContentText("Service is not running")
+                .setSmallIcon(R.drawable.ic_notification)
+                .setContentIntent(pendingIntent)
+                .setAutoCancel(false)
+                .setOnlyAlertOnce(true)
+                .setPriority(NotificationCompat.PRIORITY_LOW);
+
+            NotificationManagerCompat nm = NotificationManagerCompat.from(this);
+            nm.notify(notificationId, builder.build());
+        } catch (Exception e) {
+            Log.w("MainActivity", "Failed to post startup notification", e);
+        }
+    }
+    
+    private void toggleNativeSrtla() {
+        // Debounce rapid clicks
+        long currentTime = System.currentTimeMillis();
+        if (currentTime - lastToggleTime < TOGGLE_DEBOUNCE_MS) {
+            long remainingTime = (TOGGLE_DEBOUNCE_MS - (currentTime - lastToggleTime)) / 1000;
+            Toast.makeText(this, "Please wait " + remainingTime + " more second(s)", Toast.LENGTH_SHORT).show();
+            return;
+        }
+        lastToggleTime = currentTime;
+        
+        if (NativeSrtlaService.isServiceRunning()) {
+            stopNativeSrtla();
+        } else {
+            startNativeSrtla();
+        }
+    }
+    
+    private void startNativeSrtla() {
+        // Clear any previous error messages
+        clearError();
+        
+        textStatus.setText("⏳ Service is starting...");
+        
+        try {
+            // Get configuration from preferences (similar to regular SRTLA service)
+            SharedPreferences prefs = getSharedPreferences(PREFS_NAME, MODE_PRIVATE);
+            String srtlaHost = prefs.getString(PREF_SRTLA_HOST, "au.srt.belabox.net").trim();
+            String srtlaPort = prefs.getString(PREF_SRTLA_PORT, "5000").trim();
+            String listenPort = prefs.getString(PREF_LISTEN_PORT, "6000").trim();
+            
+            if (srtlaHost.isEmpty() || srtlaPort.isEmpty() || listenPort.isEmpty()) {
+                showError("Please configure SRTLA settings first");
+                textStatus.setText("❌ Please configure SRTLA settings first");
+                return;
+            }
+            
+            // Validate port numbers
+            try {
+                int srtlaPortNum = Integer.parseInt(srtlaPort);
+                int listenPortNum = Integer.parseInt(listenPort);
+                if (srtlaPortNum < 1 || srtlaPortNum > 65535 || listenPortNum < 1 || listenPortNum > 65535) {
+                    showError("Port numbers must be between 1 and 65535");
+                    textStatus.setText("❌ Invalid port number range");
+                    return;
+                }
+            } catch (NumberFormatException e) {
+                showError("Invalid port number format");
+                textStatus.setText("❌ Invalid port number format");
+                return;
+            }
+            
+
+            // Start the native SRTLA service
+            NativeSrtlaService.startService(this, srtlaHost, srtlaPort, listenPort);
+            
+            textStatus.setText("⏳ Service is starting...");
+            Toast.makeText(this, "Native SRTLA service starting on port " + listenPort, Toast.LENGTH_LONG).show();
+            
+            // Poll service status intelligently instead of fixed delay
+            pollServiceStartup(0);
+            
+        } catch (Exception e) {
+            textStatus.setText("❌ Error starting service: " + e.getMessage());
+            Log.e("MainActivity", "Native SRTLA service start error", e);
+        }
+    }
+    
+    /**
+     * Poll service startup status with 500ms intervals
+     * Times out after 3 seconds (6 attempts)
+     */
+    private void pollServiceStartup(int attemptCount) {
+        final int maxAttempts = 6; // Maximum attempts (3 seconds total)
+        
+        if (attemptCount >= maxAttempts) {
+            Log.i("MainActivity", "Service startup polling timed out after 3 seconds");
+            textStatus.setText("❌ Service startup timed out");
+            return;
+        }
+        
+        // Check if service started successfully
+        if (NativeSrtlaService.isServiceRunning()) {
+            Log.i("MainActivity", "Service started successfully after " + attemptCount + " polling attempts");
+            textStatus.setText("✅ Service is running");
+            updateNativeSrtlaUI();
+            srtlaStatsView.startStatsUpdates();
+            return;
+        }
+        
+        // Check if service failed (error receiver would have been triggered)
+        if (!textError.getText().toString().isEmpty()) {
+            Log.i("MainActivity", "Service startup failed with error after " + attemptCount + " attempts");
+            textStatus.setText("❌ Service failed to start");
+            return;
+        }
+        
+        // Continue polling - use 500ms intervals for 3 second timeout
+        int delay = 500; // 500ms intervals (6 attempts = 3 seconds)
+        
+        uiHandler.postDelayed(() -> {
+            Log.i("MainActivity", "Polling service startup - attempt " + (attemptCount + 1));
+            pollServiceStartup(attemptCount + 1);
+        }, delay);
+    }
+    
+    private void stopNativeSrtla() {
+        textStatus.setText("⏳ Service is stopping...");
+        
+        try {
+            NativeSrtlaService.stopService(this);
+            Toast.makeText(this, "Native SRTLA service stopping", Toast.LENGTH_SHORT).show();
+            
+            // Stop stats updates and clear display immediately
+            srtlaStatsView.stopStatsUpdates();
+            
+            // Update UI after a short delay to allow service to stop
+            uiHandler.postDelayed(() -> {
+                updateNativeSrtlaUI();
+                if (!NativeSrtlaService.isServiceRunning()) {
+                    textStatus.setText("❌ Service is stopped");
+                } else {
+                    textStatus.setText("⏳ Service is stopping...");
+                    // Try again after another delay
+                    uiHandler.postDelayed(() -> {
+                        updateNativeSrtlaUI();
+                        if (!NativeSrtlaService.isServiceRunning()) {
+                            textStatus.setText("❌ Service is stopped");
+                        } else {
+                            textStatus.setText("⚠️ Service may still be running");
+                        }
+                    }, 2000);
+                }
+            }, 1500); // Wait 1.5 seconds for service to stop
+            
+        } catch (Exception e) {
+            updateNativeSrtlaUI();
+            textStatus.setText("❌ Error stopping service: " + e.getMessage());
+            Log.e("MainActivity", "Native SRTLA service stop error", e);
+        }
+    }
+    
+    private void updateNativeSrtlaUI() {
+        // Sync state before checking to ensure accuracy
+        NativeSrtlaService.syncState();
+        
+        boolean isRunning = NativeSrtlaService.isServiceRunning();
+        // Log.i("MainActivity", "updateNativeSrtlaUI: isRunning=" + isRunning);
+        
+        if (isRunning) {
+            buttonNativeSrtla.setText("Stop Service");
+            buttonNativeSrtla.setBackgroundColor(0xFFD32F2F); // Proper red color
+            buttonSettings.setEnabled(false); // Disable settings while service is running
+            // Log.i("MainActivity", "UI updated to STOP state");
+            
+            // Update connection window visualization with native data
+        } else {
+            buttonNativeSrtla.setText("Start Service");
+            buttonNativeSrtla.setBackgroundColor(0xFF4CAF50); // Green color
+            buttonSettings.setEnabled(true); // Enable settings when service is stopped
+            
+            // Clear connections display when not running
+            srtlaStatsView.stopStatsUpdates();
+        }
+    }
+}
+

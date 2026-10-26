@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:fitsSystemWindows="true"
+  android:fillViewport="true">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="SRT URLs for Your Livestreaming App"
+      android:textStyle="bold"
+      android:textSize="18sp"
+      android:layout_marginBottom="8dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Configure your livestreaming app to send SRT to the localhost or device's IP address."
+      android:textSize="16sp"
+      android:layout_marginBottom="8dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Stream ID is only used here for building SRT URL. Your livestreaming app must send it."
+      android:textSize="16sp"
+      android:layout_marginBottom="4dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Stream ID (used only for building URLs):"
+      android:layout_marginTop="8dp"
+      android:layout_marginBottom="4dp" />
+
+    <EditText
+      android:id="@+id/edit_stream_id"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="yourStreamId"
+      android:inputType="text"
+      android:layout_marginBottom="12dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="URLs below get refreshed automatically when device networks change."
+      android:textSize="16sp"
+      android:layout_marginBottom="8dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Tap a URL to copy it."
+      android:textSize="16sp"
+      android:layout_marginBottom="8dp" />
+
+    <!-- Localhost URL section (always visible) -->
+    <com.dimadesu.bondbunny.UrlItemView
+      android:id="@+id/url_localhost"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content" />
+
+    <!-- Dynamic network URL sections are added here programmatically -->
+    <LinearLayout
+      android:id="@+id/network_urls_container"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="vertical" />
+
+  </LinearLayout>
+
+</ScrollView>

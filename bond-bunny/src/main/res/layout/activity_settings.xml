@@ -1,0 +1,264 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+  android:layout_width="match_parent"
+  android:layout_height="match_parent"
+  android:fitsSystemWindows="true"
+  android:fillViewport="true">
+
+  <LinearLayout
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:padding="16dp">
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Settings"
+      android:textStyle="bold"
+      android:textSize="18sp"
+      android:layout_marginBottom="8dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Local Listen Port:"
+      android:layout_marginBottom="4dp" />
+
+    <EditText
+      android:id="@+id/edit_listen_port"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="6000 (SRT client connects here)"
+      android:inputType="number"
+      android:layout_marginBottom="12dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="SRTLA Server:"
+      android:layout_marginBottom="4dp" />
+
+    <EditText
+      android:id="@+id/edit_server_host"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="10.0.0.1"
+      android:inputType="text"
+      android:layout_marginBottom="12dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="SRTLA Server Port:"
+      android:layout_marginBottom="4dp" />
+
+    <EditText
+      android:id="@+id/edit_server_port"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="5000"
+      android:inputType="number"
+      android:layout_marginBottom="12dp" />
+
+    <!-- Moblink -->
+    <View
+      android:layout_width="match_parent"
+      android:layout_height="1dp"
+      android:background="#33000000"
+      android:layout_marginBottom="12dp" />
+
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:gravity="center_vertical"
+      android:layout_marginBottom="4dp">
+
+      <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Moblink Streamer Server"
+        android:textStyle="bold"
+        android:textSize="16sp" />
+
+      <Switch
+        android:id="@+id/switch_moblink_enabled"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content" />
+
+    </LinearLayout>
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Connect phones running Moblink app to the same Wi-Fi to use their cellular data as additional SRTLA bonding connections."
+      android:layout_marginBottom="8dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Moblink Server Password:"
+      android:layout_marginBottom="4dp" />
+
+    <EditText
+      android:id="@+id/edit_moblink_password"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="Relays connect using this password"
+      android:inputType="textVisiblePassword"
+      android:layout_marginBottom="12dp" />
+
+    <TextView
+      android:layout_width="wrap_content"
+      android:layout_height="wrap_content"
+      android:text="Moblink Server Port:"
+      android:layout_marginBottom="4dp" />
+
+    <EditText
+      android:id="@+id/edit_moblink_port"
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:hint="7788"
+      android:inputType="number"
+      android:layout_marginBottom="12dp" />
+
+    <!-- Classic SRTLA Algorithm Toggle -->
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="8dp"
+      android:gravity="center_vertical"
+      android:visibility="gone">
+
+      <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Classic SRTLA algorithm that matches original srtla_send logic."
+        android:textSize="12sp" />
+
+      <Button
+        android:id="@+id/button_toggle_classic_mode"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="OFF"
+        android:textSize="12sp"
+        android:minWidth="100dp"
+      />
+
+    </LinearLayout>
+
+    <!-- Network Priority Toggle -->
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="8dp"
+      android:gravity="center_vertical"
+      android:visibility="gone">
+
+      <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Wi-Fi > Ethernet > Cellular priority. Additionally, windows above 10k and 20k get extra points."
+        android:textSize="12sp" />
+
+      <Button
+        android:id="@+id/button_toggle_network_priority"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ON"
+        android:textSize="12sp"
+        android:minWidth="100dp"
+      />
+
+    </LinearLayout>
+
+    <!-- Quality-Based Scoring Toggle -->
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="8dp"
+      android:gravity="center_vertical"
+      android:visibility="gone">
+
+      <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Punish connections with recent NAKs.\nMore recent = more punishment.\nDouble punishment for NAK burst."
+        android:textSize="12sp" />
+
+      <Button
+        android:id="@+id/button_toggle_quality_scoring"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ON"
+        android:textSize="12sp"
+        android:minWidth="100dp"
+      />
+
+    </LinearLayout>
+
+    <!-- Connection Exploration Toggle -->
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="8dp"
+      android:gravity="center_vertical"
+      android:visibility="gone">
+
+      <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text="Connection exploration.\n10% of the time pick 2nd best network.\nEvery ~5 seconds explore for ~500ms."
+        android:textSize="12sp" />
+
+      <Button
+        android:id="@+id/button_toggle_exploration"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ON"
+        android:textSize="12sp"
+        android:minWidth="100dp"
+      />
+
+    </LinearLayout>
+
+    <!-- Connection Stickiness Toggle -->
+    <LinearLayout
+      android:layout_width="match_parent"
+      android:layout_height="wrap_content"
+      android:orientation="horizontal"
+      android:layout_marginBottom="16dp"
+      android:gravity="center_vertical"
+      android:visibility="gone">
+
+      <TextView
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_weight="1"
+        android:text='Connection "stickiness". Prevent frequent network switches. Use selected network for at least 500ms.'
+        android:textSize="12sp" />
+
+      <Button
+        android:id="@+id/button_toggle_stickiness"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="ON"
+        android:textSize="12sp"
+        android:minWidth="100dp"
+      />
+
+    </LinearLayout>
+
+  </LinearLayout>
+
+</ScrollView>

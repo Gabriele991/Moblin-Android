@@ -1,0 +1,94 @@
+plugins {
+    id 'com.android.application' version '8.12.2'
+}
+
+android {
+    namespace = 'com.dimadesu.bondbunny'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId "com.dimadesu.bondbunny"
+        minSdk 26
+        targetSdk 36
+        versionCode 14
+        versionName "1.15.0"
+        
+        ndk {
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86', 'x86_64'
+        }
+    }
+
+    signingConfigs {
+        release {
+            // Read from keystore.properties file
+            def keystorePropertiesFile = rootProject.file("keystore.properties")
+            if (keystorePropertiesFile.exists()) {
+                def keystoreProperties = new Properties()
+                keystoreProperties.load(new FileInputStream(keystorePropertiesFile))
+                
+                storeFile file(keystoreProperties['storeFile'])
+                storePassword keystoreProperties['storePassword']
+                keyAlias keystoreProperties['keyAlias']
+                keyPassword keystoreProperties['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            signingConfig = signingConfigs.release
+        }
+    }
+    
+    // Custom APK output names
+    applicationVariants.all { variant ->
+        variant.outputs.all { output ->
+            def versionName = variant.versionName
+            def buildType = variant.buildType.name
+            outputFileName = "Bond-Bunny-v${versionName}-${buildType}.apk"
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_11
+        targetCompatibility JavaVersion.VERSION_11
+    }
+
+    java {
+        toolchain {
+            languageVersion = JavaLanguageVersion.of(21)
+        }
+    }
+
+    packaging {
+        jniLibs {
+            useLegacyPackaging = false
+        }
+    }
+
+    // Enable NDK (needed for ndk.abiFilters in defaultConfig)
+    ndkVersion = "29.0.14206865"
+}
+
+dependencies {
+    implementation 'androidx.appcompat:appcompat:1.7.1'
+    implementation 'com.google.android.material:material:1.12.0'
+    implementation project(':srtla-lib')
+}
+
+// Custom AAB output names - create copy so Android Studio can still locate original
+afterEvaluate {
+    tasks.named("bundleRelease").configure {
+        doLast {
+            def originalBundle = file("${projectDir}/release/Bond Bunny-release.aab")
+            if (originalBundle.exists()) {
+                def newName = "Bond-Bunny-v${android.defaultConfig.versionName}-release.aab"
+                def newFile = new File(originalBundle.parent, newName)
+                java.nio.file.Files.copy(originalBundle.toPath(), newFile.toPath(), 
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING)
+            }
+        }
+    }
+}
